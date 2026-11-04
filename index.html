@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Charlamos">
+<meta name="theme-color" content="#f3f2ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#15171c" media="(prefers-color-scheme: dark)">
+<title>Charlamos</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one full-height column: header, scrolling conversation, a voice bar pinned to the bottom. */
+:root{
+  --bg:#f3f2ec; --surface:#ffffff; --fg:#1c1e24; --muted:#6b6e78; --line:#dcdad1;
+  --accent:#2250a3; --accent-ink:#ffffff; --tutor:#e9eef8; --mine:#ffffff;
+  --mark:#b8780a; --mark-bg:#fff4d6; --ok:#2e7d4f; --bad:#b4423a; --live:#c8362e;
+  --display:"Instrument Serif",Georgia,"Times New Roman",serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#15171c; --surface:#1e2127; --fg:#e8e6df; --muted:#9a9ca6; --line:#30343c;
+    --accent:#7ea3ea; --accent-ink:#0f1a30; --tutor:#242b3a; --mine:#1e2127;
+    --mark:#f0b43c; --mark-bg:#2d2715; --ok:#6fcf97; --bad:#e8857d; --live:#ff6b61; color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%;overscroll-behavior:none}
+button,select,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+
+.app{height:100%;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+.top{display:flex;align-items:center;gap:10px;padding:8px max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line)}
+h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margin:0;letter-spacing:-.01em}
+.top .scene{flex:1;min-width:0;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon{background:none;border:1px solid var(--line);border-radius:999px;width:36px;height:36px;display:grid;place-items:center;cursor:pointer;flex:none}
+.icon svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+.log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:12px max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px));scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){.log{scroll-behavior:auto}}
+.turn{display:flex;flex-direction:column;gap:4px;max-width:88%}
+.turn.tutor{align-self:flex-start}
+.turn.me{align-self:flex-end;align-items:flex-end}
+.who{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.bubble{padding:10px 14px;border-radius:16px;background:var(--tutor);white-space:pre-wrap;overflow-wrap:anywhere}
+.me .bubble{background:var(--mine);border:1px solid var(--line);border-bottom-right-radius:4px}
+.tutor .bubble{border-bottom-left-radius:4px}
+.bubble.thinking,.bubble.interim{color:var(--muted);font-style:italic}
+.tools{display:flex;gap:4px;flex-wrap:wrap}
+.mini{background:none;border:none;padding:4px 6px;color:var(--muted);font-size:13px;cursor:pointer;border-radius:6px}
+.mini:active{background:var(--tutor)}
+.en{font-size:14px;color:var(--muted);padding:0 4px}
+.fix{align-self:flex-end;max-width:88%;background:var(--mark-bg);border-left:3px solid var(--mark);border-radius:8px;padding:8px 12px;font-size:14px;display:flex;flex-direction:column;gap:3px}
+.fix .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mark);font-weight:600}
+.fix .orig{text-decoration:line-through;color:var(--muted);font-family:var(--mono);font-size:13px}
+.fix .good{font-family:var(--mono);font-size:13px;font-weight:500}
+.okmark{align-self:flex-end;font-size:12px;color:var(--ok);padding:0 4px}
+.hints{display:flex;flex-direction:column;gap:6px;align-self:stretch}
+.hints .lead{font-size:12px;color:var(--muted)}
+.chip{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:8px 12px;font-size:15px;cursor:pointer;text-align:left}
+.chip small{display:block;color:var(--muted);font-size:13px}
+.notice{margin:0 max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px));border:1px solid var(--line);border-left:3px solid var(--bad);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:14px}
+.notice.info{border-left-color:var(--accent)}
+
+.bar{border-top:1px solid var(--line);background:var(--surface);padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:8px}
+.status{font-size:13px;color:var(--muted);min-height:1.3em;text-align:center}
+.status.live{color:var(--live);font-weight:500}
+.voice{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px}
+.side{display:flex;gap:6px;align-items:center}
+.side.right{justify-content:flex-end}
+.mic{width:76px;height:76px;border-radius:50%;border:none;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.18);transition:transform .12s ease}
+.mic:active{transform:scale(.96)}
+.mic.listening{background:var(--live);color:#fff;animation:pulse 1.2s ease-in-out infinite}
+.mic:disabled{opacity:.45;cursor:default;animation:none}
+.mic svg{width:34px;height:34px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(200,54,46,.45)}50%{box-shadow:0 0 0 14px rgba(200,54,46,0)}}
+@media (prefers-reduced-motion:reduce){.mic.listening{animation:none}}
+.btn{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:500}
+.btn:disabled{opacity:.5;cursor:default}
+.typed{display:flex;gap:8px}
+.typed input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:16px}
+.toggle{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.field .toggle{flex-direction:row;justify-content:flex-start;gap:10px;font-size:15px;color:var(--fg);text-transform:none;letter-spacing:0;padding:6px 0}
+.field .toggle input{width:20px;height:20px;flex:none;accent-color:var(--accent)}
+
+/* Sheets */
+.sheet{position:fixed;inset:0;background:var(--bg);z-index:20;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+.sheet .head{display:flex;align-items:center;gap:10px;padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line)}
+.sheet h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0;flex:1}
+.sheet .body{flex:1;overflow-y:auto;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:18px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.field select,.field input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:16px;width:100%}
+.field .help{font-size:13px;color:var(--muted)}
+.field .help a{color:var(--accent)}
+.notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.notes li{border-top:1px solid var(--line);padding-top:8px;font-size:14px;display:flex;flex-direction:column;gap:2px}
+.notes .orig{text-decoration:line-through;color:var(--muted);font-family:var(--mono);font-size:13px}
+.notes .good{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--mark)}
+.notes .note{color:var(--muted)}
+.empty{color:var(--muted);font-size:14px}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-variant-numeric:tabular-nums}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.stat b{display:block;font-size:20px;font-weight:600}
+.stat span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>Charlamos</h1>
+    <div class="scene" id="scene"></div>
+    <button class="icon" id="open-notes" type="button" aria-label="Notebook"><svg viewBox="0 0 24 24"><path d="M5 4h11a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2z"/><path d="M9 4v16"/><path d="M12 9h3M12 13h3"/></svg></button>
+    <button class="icon" id="open-settings" type="button" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </header>
+
+  <div id="log" class="log" aria-live="polite"></div>
+  <div id="notice" class="notice" hidden></div>
+
+  <div class="bar">
+    <div id="status" class="status"></div>
+    <div class="voice">
+      <div class="side">
+        <button class="btn" id="help" type="button">I'm stuck</button>
+      </div>
+      <button class="mic" id="mic" type="button" aria-label="Talk">
+        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+      </button>
+      <div class="side right">
+        <button class="btn" id="stop" type="button" hidden>Stop</button>
+        <button class="btn" id="keyboard" type="button" aria-label="Type instead">Type</button>
+      </div>
+    </div>
+    <form id="typed" class="typed" hidden>
+      <input id="msg" type="text" placeholder="Escribe en español…" autocomplete="off" autocapitalize="sentences">
+      <button class="btn primary" type="submit">Send</button>
+    </form>
+  </div>
+</div>
+
+<!-- Notebook -->
+<section class="sheet" id="notes-sheet" hidden aria-label="Notebook">
+  <div class="head"><h2>Cuaderno</h2><button class="btn" id="copynotes" type="button">Copy</button><button class="btn" id="close-notes" type="button">Done</button></div>
+  <div class="body">
+    <div class="stats">
+      <div class="stat"><b id="nturns">0</b><span>Turns</span></div>
+      <div class="stat"><b id="ncorr">0</b><span>Fixes</span></div>
+      <div class="stat"><b id="cost">$0.00</b><span>API spend</span></div>
+    </div>
+    <p class="empty" style="margin:0">Every correction from this conversation. Read it back before you start the next one.</p>
+    <ol id="notes" class="notes"></ol>
+    <div id="notes-empty" class="empty">No corrections yet. Mistakes land here as you go.</div>
+    <div class="row"><button class="btn" id="restart" type="button">New conversation</button></div>
+  </div>
+</section>
+
+<!-- Settings -->
+<section class="sheet" id="settings-sheet" hidden aria-label="Settings">
+  <div class="head"><h2>Settings</h2><button class="btn primary" id="close-settings" type="button">Done</button></div>
+  <div class="body">
+    <div class="field">
+      <label for="scenario">Scenario</label>
+      <select id="scenario"></select>
+    </div>
+    <div class="field">
+      <label for="level">Your level</label>
+      <select id="level"></select>
+    </div>
+    <div class="field">
+      <label for="region">Spanish from</label>
+      <select id="region"></select>
+    </div>
+    <div class="field">
+      <label class="toggle"><input type="checkbox" id="handsfree"> Hands-free: listen again after each reply</label>
+      <label class="toggle"><input type="checkbox" id="autospeak"> Read replies aloud</label>
+      <label class="toggle"><input type="checkbox" id="showen"> Show English under replies</label>
+    </div>
+    <div class="field">
+      <label for="apikey">Anthropic API key</label>
+      <input id="apikey" type="password" placeholder="sk-ant-…" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="help">Stored only on this device. Get one at <a href="https://platform.claude.com/" target="_blank" rel="noopener">platform.claude.com</a> and set a monthly spending limit on it there.</div>
+    </div>
+    <div class="field">
+      <label for="model">Model</label>
+      <select id="model">
+        <option value="claude-opus-5-5">Claude Opus 5.5 (best corrections)</option>
+        <option value="claude-sonnet-5-5">Claude Sonnet 5.5</option>
+        <option value="claude-haiku-5-5">Claude Haiku 5.5 (fastest, cheapest)</option>
+      </select>
+      <div class="help" id="pricehelp"></div>
+    </div>
+    <div class="field">
+      <label>Voice</label>
+      <div class="help" id="voicehelp"></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function(){
+  "use strict";
+  const SCENARIOS = {
+    cafe:    {label:"At a café",             brief:"the learner is a customer at your café; you are the waiter",
+              es:"¡Hola! Bienvenido a Café Luna. ¿Qué te pongo?", en:"Hi! Welcome to Café Luna. What can I get you?"},
+    meet:    {label:"Meeting someone new",   brief:"you have just met the learner at a friend's party",
+              es:"¡Hola! Creo que no nos conocemos. Yo soy {name}. ¿Y tú, cómo te llamas?", en:"Hi! I don't think we've met. I'm {name}. And you, what's your name?"},
+    lost:    {label:"Asking for directions", brief:"the learner is a tourist who looks lost on the street; you are a local",
+              es:"¡Hola! Pareces un poco perdido. ¿Buscas algún sitio?", en:"Hi! You look a bit lost. Are you looking for somewhere?"},
+    market:  {label:"At the market",         brief:"you sell fruit and vegetables at a street market; the learner is shopping",
+              es:"¡Buenos días! Hoy tengo fruta muy fresca. ¿Qué buscas?", en:"Good morning! I've got very fresh fruit today. What are you looking for?"},
+    weekend: {label:"Your weekend",          brief:"you are a friend catching up on Monday morning",
+              es:"¡Hola! ¿Qué tal el fin de semana? ¿Hiciste algo divertido?", en:"Hi! How was your weekend? Did you do anything fun?"},
+    work:    {label:"Your work",             brief:"you are a friend who is curious about what the learner does for a living",
+              es:"Oye, nunca me has contado a qué te dedicas. ¿En qué trabajas?", en:"Hey, you've never told me what you do. What's your job?"},
+    doctor:  {label:"At the doctor",         brief:"you are a doctor; the learner is a patient describing what is wrong",
+              es:"Buenas tardes, pase y siéntese. Cuénteme, ¿qué le pasa?", en:"Good afternoon, come in and sit down. Tell me, what's the matter?"},
+    free:    {label:"Free conversation",     brief:"an open chat between friends about whatever the learner wants",
+              es:"¡Hola! ¿De qué te apetece hablar hoy?", en:"Hi! What do you feel like talking about today?"}
+  };
+  const LEVELS = {
+    A1:{label:"A1 beginner",           brief:"knows greetings, present tense and basic words", len:"one or two very short sentences, simple present tense, common words only", strict:"Correct only mistakes that block understanding or basic grammar (gender, verb endings)."},
+    A2:{label:"A2 elementary",         brief:"handles everyday topics, uses past tenses with mistakes", len:"two short sentences, everyday vocabulary, present and simple past", strict:"Correct grammar, agreement and wrong words."},
+    B1:{label:"B1 intermediate",       brief:"holds a conversation, mixes up past tenses and the subjunctive", len:"two or three natural sentences, normal speed, an idiom now and then", strict:"Correct grammar, tense choice, word choice and unnatural phrasing."},
+    B2:{label:"B2 upper-intermediate", brief:"fluent but makes subtle mistakes", len:"three natural sentences as you would with a native speaker, idioms and colloquial turns welcome", strict:"Correct anything a native speaker would notice, including register and unnatural phrasing."}
+  };
+  const REGIONS = {
+    es:{label:"Spain",     name:"Lucía",   place:"Madrid, Spain",           lang:"es-ES", style:"use vosotros, 'vale', 'tío/tía', peninsular vocabulary like 'coche', 'ordenador', 'zumo'"},
+    mx:{label:"Mexico",    name:"Valeria", place:"Guadalajara, Mexico",     lang:"es-MX", style:"use ustedes, 'órale', 'qué padre', Mexican vocabulary like 'carro', 'computadora', 'jugo'"},
+    ar:{label:"Argentina", name:"Martín",  place:"Buenos Aires, Argentina", lang:"es-AR", style:"use vos and the voseo verb forms, 'che', 'dale', 'bárbaro', Rioplatense vocabulary"}
+  };
+  // $ per million tokens: input, output
+  const PRICES = {"claude-opus-5-5":[4,20], "claude-sonnet-5-5":[2,10], "claude-haiku-5-5":[0.10,0.50]};
+
+  const $ = id => document.getElementById(id);
+  const log = $("log"), status = $("status"), notice = $("notice"), mic = $("mic"), msg = $("msg");
+
+  for (const [k,v] of Object.entries(SCENARIOS)) $("scenario").append(new Option(v.label, k));
+  for (const [k,v] of Object.entries(LEVELS))    $("level").append(new Option(v.label, k));
+  for (const [k,v] of Object.entries(REGIONS))   $("region").append(new Option(v.label, k));
+
+  // Preferences live on this device only.
+  let prefs = {scenario:"cafe", level:"A2", region:"es", handsfree:true, autospeak:true, showen:false, model:"claude-opus-5-5", apikey:""};
+  try { Object.assign(prefs, JSON.parse(localStorage.getItem("charlamos.prefs") || "{}")); } catch(e){}
+  if (!SCENARIOS[prefs.scenario]) prefs.scenario = "cafe";
+  if (!LEVELS[prefs.level]) prefs.level = "A2";
+  if (!REGIONS[prefs.region]) prefs.region = "es";
+  if (!PRICES[prefs.model]) prefs.model = "claude-opus-5-5";
+  function savePrefs(){ try { localStorage.setItem("charlamos.prefs", JSON.stringify(prefs)); } catch(e){} }
+  function syncSettingsUI(){
+    $("scenario").value = prefs.scenario; $("level").value = prefs.level; $("region").value = prefs.region;
+    $("handsfree").checked = !!prefs.handsfree; $("autospeak").checked = !!prefs.autospeak; $("showen").checked = !!prefs.showen;
+    $("model").value = prefs.model; $("apikey").value = prefs.apikey || "";
+    const p = PRICES[prefs.model];
+    $("pricehelp").textContent = `$${p[0]} per million input tokens, $${p[1]} per million output. A typical turn is well under a cent.`;
+    $("scene").textContent = `${SCENARIOS[prefs.scenario].label} · ${prefs.level} · ${REGIONS[prefs.region].label}`;
+  }
+
+  let state = {turns:[], notes:[], myTurns:0, usage:{input:0, output:0, cost:0}};
+  let busy = false, ctl = null, rec = null, listening = false, wantResume = false;
+
+  function person(){ return REGIONS[prefs.region]; }
+  function systemPrompt(){
+    const sc = SCENARIOS[prefs.scenario], lv = LEVELS[prefs.level], p = person();
+    return [
+      `You are ${p.name}, a warm, patient native Spanish speaker from ${p.place}, having a spoken conversation with a learner so they can practise speaking. The learner's words arrive through speech recognition, so small transcription slips (missing accents, odd punctuation, a homophone) are not the learner's mistakes: ignore them.`,
+      `Scenario: ${sc.label}. ${sc.brief}. Learner level: ${lv.label} (${lv.brief}).`,
+      `Rules for every reply:`,
+      `- "reply": what you say next, in Spanish only: ${lv.len}. Speak like someone from ${p.place} (${p.style}). Stay in character and in the scenario. Always keep the conversation moving: end with a question or an opening for the learner. Never explain grammar inside "reply". It will be read aloud, so write it the way it is spoken: no lists, no parentheses.`,
+      `- "correction": look only at the learner's latest message. ${lv.strict} If there is a mistake, give {"original": the exact wrong phrase as they said it, "fixed": that phrase corrected, "note": one short English sentence saying why}. Fix the single most important mistake. If the message is correct and natural, use null. Do not correct things that are merely different from how you would say them.`,
+      `- "translation": a plain English translation of your "reply".`,
+      `- If the learner speaks English, reply in Spanish anyway, and in "correction" put their English in "original" and the natural Spanish way to say it in "fixed", with a note like "Here is how to say that in Spanish".`,
+      `Reply with only a JSON object and nothing else: {"reply": string, "correction": {"original": string, "fixed": string, "note": string} | null, "translation": string}`
+    ].join("\n");
+  }
+  function opener(){
+    const sc = SCENARIOS[prefs.scenario], p = person();
+    return {reply: sc.es.replace("{name}", p.name), correction:null, translation: sc.en.replace("{name}", p.name)};
+  }
+  function apiMessages(extra){
+    const convo = state.turns.slice(-30).map(t => ({role:t.role, content:t.content}));
+    // The API requires the first message to be from the user, so introduce the tutor's opener.
+    const first = {role:"user", content:"(The conversation starts. You spoke first.)"};
+    return extra ? [first, ...convo, extra] : [first, ...convo];
+  }
+
+  // --- Claude API, called directly from the browser with the device's own key.
+  async function askClaude(messages, signal){
+    const key = (prefs.apikey || "").trim();
+    if (!key) throw {code:"no_key"};
+    const body = {
+      model: prefs.model,
+      max_tokens: 1024,
+      system: systemPrompt(),
+      output_config: {effort: "low"},
+      messages
+    };
+    const headers = {
+      "content-type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    };
+    if (prefs.model !== "claude-haiku-5-5"){
+      body.fallbacks = "default";
+      headers["anthropic-beta"] = "server-side-fallback-2026-07-01";
+    }
+    let res;
+    try {
+      res = await fetch("https://api.anthropic.com/v1/messages", {method:"POST", headers, body: JSON.stringify(body), signal});
+    } catch(e){
+      if (e && e.name === "AbortError") throw {code:"cancelled"};
+      throw {code:"network"};
+    }
+    if (!res.ok){
+      let detail = "";
+      try { detail = (await res.json()).error?.message || ""; } catch(e){}
+      if (res.status === 401) throw {code:"auth", detail};
+      if (res.status === 429) throw {code:"rate", detail};
+      if (res.status === 400) throw {code:"bad_request", detail};
+      throw {code:"server", detail, status:res.status};
+    }
+    const data = await res.json();
+    if (data.usage){
+      const p = PRICES[prefs.model];
+      const inp = (data.usage.input_tokens||0) + (data.usage.cache_read_input_tokens||0) + (data.usage.cache_creation_input_tokens||0);
+      const out = data.usage.output_tokens||0;
+      state.usage.input += inp; state.usage.output += out;
+      state.usage.cost += inp*p[0]/1e6 + out*p[1]/1e6;
+    }
+    if (data.stop_reason === "refusal") throw {code:"refused"};
+    const text = (data.content||[]).filter(b => b.type === "text").map(b => b.text).join("\n");
+    return {text, truncated: data.stop_reason === "max_tokens"};
+  }
+  function parseJSON(text){
+    try { return JSON.parse(text); } catch(e){}
+    const m = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (m){ try { return JSON.parse(m[1]); } catch(e){} }
+    const a = text.indexOf("{"), b = text.lastIndexOf("}");
+    if (a >= 0 && b > a){ try { return JSON.parse(text.slice(a, b+1)); } catch(e){} }
+    const c = text.indexOf("["), d = text.lastIndexOf("]");
+    if (c >= 0 && d > c){ try { return JSON.parse(text.slice(c, d+1)); } catch(e){} }
+    return null;
+  }
+
+  // --- Rendering
+  function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function scrollDown(){ log.scrollTop = log.scrollHeight; }
+  function renderTutor(data){
+    const t = el("div","turn tutor");
+    t.append(el("div","who", person().name));
+    t.append(el("div","bubble", data.reply));
+    const en = el("div","en", data.translation || ""); en.hidden = !prefs.showen || !data.translation; en.dataset.en = "1";
+    t.append(en);
+    const tools = el("div","tools");
+    if ("speechSynthesis" in window){ const b = el("button","mini","▶ Listen"); b.type="button"; b.addEventListener("click", () => speak(data.reply, false)); tools.append(b); }
+    if (data.translation){ const b = el("button","mini","English"); b.type="button"; b.addEventListener("click", () => { en.hidden = !en.hidden; }); tools.append(b); }
+    t.append(tools);
+    log.append(t); scrollDown();
+    return t;
+  }
+  function renderMine(text, cls){
+    const t = el("div","turn me");
+    t.append(el("div","who","You"));
+    t.append(el("div","bubble" + (cls ? " " + cls : ""), text));
+    log.append(t); scrollDown();
+    return t;
+  }
+  function renderCorrection(c){
+    if (!c){ log.append(el("div","okmark","✓ Nothing to fix")); scrollDown(); return; }
+    const f = el("div","fix");
+    f.append(el("div","label","Better"));
+    if (c.original) f.append(el("div","orig", c.original));
+    f.append(el("div","good", c.fixed));
+    if (c.note) f.append(el("div","note", c.note));
+    log.append(f); scrollDown();
+  }
+  function thinkingBubble(){
+    const t = el("div","turn tutor");
+    t.append(el("div","who", person().name));
+    t.append(el("div","bubble thinking", person().name + " is thinking…"));
+    log.append(t); scrollDown();
+    return t;
+  }
+  function renderNotes(){
+    const notesEl = $("notes");
+    notesEl.replaceChildren();
+    for (const c of state.notes){
+      const li = el("li");
+      if (c.original) li.append(el("span","orig", c.original));
+      li.append(el("span","good", c.fixed));
+      if (c.note) li.append(el("span","note", c.note));
+      notesEl.append(li);
+    }
+    $("notes-empty").hidden = state.notes.length > 0;
+    $("ncorr").textContent = String(state.notes.length);
+    $("nturns").textContent = String(state.myTurns);
+    $("cost").textContent = "$" + state.usage.cost.toFixed(state.usage.cost < 0.1 ? 3 : 2);
+  }
+  function renderAll(){
+    log.replaceChildren();
+    for (const t of state.turns){
+      if (t.role === "assistant"){ const d = parseJSON(t.content) || {reply:t.content}; renderTutor(d); }
+      else { renderMine(t.content); if (t.correction !== undefined) renderCorrection(t.correction); }
+    }
+    renderNotes();
+  }
+  function showNotice(text, info){ notice.textContent = text || ""; notice.className = "notice" + (info ? " info" : ""); notice.hidden = !text; }
+  function setStatus(text, live){ status.textContent = text || ""; status.className = "status" + (live ? " live" : ""); }
+
+  // --- Speech out
+  let voices = [];
+  function loadVoices(){ try { voices = speechSynthesis.getVoices() || []; } catch(e){ voices = []; } updateVoiceHelp(); }
+  function pickVoice(){
+    const want = person().lang.toLowerCase();
+    const norm = v => (v.lang || "").replace("_","-").toLowerCase();
+    return voices.find(v => norm(v) === want && !v.localService) || voices.find(v => norm(v) === want)
+        || voices.find(v => norm(v).startsWith("es") && !v.localService) || voices.find(v => norm(v).startsWith("es")) || null;
+  }
+  function updateVoiceHelp(){
+    const h = $("voicehelp"); if (!h) return;
+    if (!("speechSynthesis" in window)){ h.textContent = "This browser cannot read text aloud."; return; }
+    const v = pickVoice();
+    h.textContent = v ? `Using "${v.name}" (${v.lang}). On iPhone you can add better Spanish voices under Settings › Accessibility › Spoken Content › Voices.` : "No Spanish voice installed yet. On iPhone, add one under Settings › Accessibility › Spoken Content › Voices › Spanish.";
+  }
+  if ("speechSynthesis" in window){ loadVoices(); speechSynthesis.addEventListener("voiceschanged", loadVoices); }
+  function speak(text, thenListen){
+    if (!("speechSynthesis" in window)){ if (thenListen) startListening(); return; }
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = person().lang; const v = pickVoice(); if (v) u.voice = v; u.rate = 0.92;
+      u.onend = () => { if (thenListen) startListening(); };
+      u.onerror = () => { if (thenListen) startListening(); };
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+    } catch(e){ if (thenListen) startListening(); }
+  }
+
+  // --- Speech in
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let interimBubble = null;
+  function startListening(){
+    if (!SR || busy || listening) return;
+    try {
+      rec = new SR();
+      rec.lang = person().lang; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+      let finalText = "";
+      rec.onstart = () => { listening = true; mic.classList.add("listening"); setStatus("Listening… speak Spanish, then pause", true); showNotice(""); };
+      rec.onresult = (ev) => {
+        let interim = "";
+        for (let i = ev.resultIndex; i < ev.results.length; i++){
+          const r = ev.results[i];
+          if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+        }
+        const shown = (finalText + " " + interim).trim();
+        if (shown){ if (!interimBubble) interimBubble = renderMine(shown, "interim"); else { interimBubble.querySelector(".bubble").textContent = shown; scrollDown(); } }
+      };
+      rec.onerror = (ev) => {
+        listening = false; mic.classList.remove("listening");
+        if (ev.error === "not-allowed" || ev.error === "service-not-allowed") showNotice("Microphone access was refused. Allow it for this site in your browser settings, then try again.");
+        else if (ev.error === "no-speech") setStatus("Didn't hear anything. Tap the mic and try again.");
+        else if (ev.error !== "aborted") setStatus("Speech recognition error: " + ev.error);
+      };
+      rec.onend = () => {
+        listening = false; mic.classList.remove("listening");
+        const text = finalText.trim();
+        if (interimBubble){ interimBubble.remove(); interimBubble = null; }
+        if (text) send(text); else if (!busy) setStatus("Tap the mic to talk");
+      };
+      rec.start();
+    } catch(e){ listening = false; mic.classList.remove("listening"); setStatus("Couldn't start the microphone. Tap the mic to try again."); }
+  }
+  function stopListening(){ try { if (rec) rec.stop(); } catch(e){} }
+
+  // --- Conversation
+  function startConversation(){
+    if (ctl) ctl.abort(); stopListening(); try { speechSynthesis.cancel(); } catch(e){}
+    state = {turns:[{role:"assistant", content: JSON.stringify(opener())}], notes:[], myTurns:0, usage:{input:0, output:0, cost:0}};
+    showNotice(""); renderAll(); syncSettingsUI();
+    setStatus(SR ? "Tap the mic to talk" : "Type below to talk");
+  }
+  const COPY = {
+    no_key: "Add your Anthropic API key in Settings (the gear, top right) to start.",
+    auth: "The API key was rejected. Check it in Settings.",
+    rate: "Rate limited by the API. Wait a moment and try again.",
+    refused: "Claude declined that message. Try saying it differently.",
+    network: "No connection to the Claude API. Check your internet and try again.",
+    bad_request: "The API rejected the request.",
+    server: "The Claude API had a problem. Try again in a moment.",
+    garbled: "The reply came back garbled. Try again."
+  };
+  function fail(e){
+    if (!e || e.code === "cancelled") return;
+    let text = COPY[e.code] || COPY.server;
+    if (e.detail) text += " " + e.detail;
+    showNotice(text);
+    if (e.code === "no_key" || e.code === "auth") openSheet("settings-sheet");
+  }
+  function setBusy(on){ busy = on; mic.disabled = on; $("help").disabled = on; $("stop").hidden = !on; }
+
+  async function send(text){
+    text = (text || "").trim();
+    if (!text || busy) return;
+    showNotice("");
+    const mine = {role:"user", content:text};
+    state.turns.push(mine);
+    renderMine(text);
+    const wait = thinkingBubble();
+    ctl = new AbortController(); setBusy(true); setStatus("Thinking…");
+    try {
+      const {text: raw, truncated} = await askClaude(apiMessages(), ctl.signal);
+      const data = parseJSON(raw);
+      if (!data || typeof data.reply !== "string") throw {code:"garbled"};
+      wait.remove();
+      const c = (data.correction && typeof data.correction.fixed === "string") ? {original:String(data.correction.original||""), fixed:data.correction.fixed, note:String(data.correction.note||"")} : null;
+      mine.correction = c; renderCorrection(c); if (c) state.notes.push(c);
+      state.myTurns += 1;
+      const reply = {reply:data.reply, translation:data.translation || ""};
+      state.turns.push({role:"assistant", content: JSON.stringify(reply)});
+      renderTutor(reply); renderNotes();
+      if (truncated) showNotice("The reply was cut short.", true);
+      setBusy(false);
+      if (prefs.autospeak){ setStatus("Speaking…"); speak(data.reply, prefs.handsfree && !!SR); }
+      else if (prefs.handsfree && SR) startListening();
+      if (!prefs.autospeak && !(prefs.handsfree && SR)) setStatus("Tap the mic to talk");
+    } catch(e){
+      wait.remove();
+      state.turns.pop();
+      const last = log.lastElementChild; if (last && last.classList.contains("me")) last.remove();
+      msg.value = text;
+      setBusy(false); setStatus("Tap the mic to talk");
+      fail(e);
+    }
+  }
+
+  async function help(){
+    if (busy) return;
+    showNotice("");
+    const lv = LEVELS[prefs.level];
+    const ask = {role:"user", content:`(This is not part of the conversation.) The learner is stuck and does not know what to say next. Suggest 3 short, different things they could say right now to continue the conversation above, written at ${lv.label} level in the Spanish of ${person().place}. Reply with only a JSON array of {"es": string, "en": string}.`};
+    const box = el("div","hints"); box.append(el("div","lead","Thinking of what you could say…")); log.append(box); scrollDown();
+    ctl = new AbortController(); setBusy(true); setStatus("Thinking…");
+    try {
+      const {text: raw} = await askClaude(apiMessages(ask), ctl.signal);
+      const list = parseJSON(raw);
+      box.replaceChildren(el("div","lead","Pick one and say it yourself:"));
+      for (const h of (Array.isArray(list) ? list : []).slice(0,3)){
+        if (!h || typeof h.es !== "string") continue;
+        const b = el("button","chip"); b.type="button";
+        b.append(document.createTextNode(h.es)); if (h.en) b.append(el("small", null, h.en));
+        b.addEventListener("click", () => { speak(h.es, false); });
+        box.append(b);
+      }
+      renderNotes(); scrollDown();
+    } catch(e){ box.remove(); fail(e); }
+    finally { setBusy(false); setStatus("Tap the mic to talk"); }
+  }
+
+  // --- Sheets
+  function openSheet(id){ $(id).hidden = false; }
+  function closeSheet(id){ $(id).hidden = true; }
+
+  // --- Wiring
+  mic.addEventListener("click", () => {
+    if (!SR){ $("typed").hidden = false; msg.focus(); showNotice("This browser has no speech recognition. Type instead, or open the app in Safari (iPhone) or Chrome (Android).", true); return; }
+    if (listening){ stopListening(); return; }
+    if (!(prefs.apikey||"").trim()){ fail({code:"no_key"}); return; }
+    try { speechSynthesis.cancel(); } catch(e){}
+    startListening();
+  });
+  $("keyboard").addEventListener("click", () => { $("typed").hidden = !$("typed").hidden; if (!$("typed").hidden) msg.focus(); });
+  $("typed").addEventListener("submit", e => { e.preventDefault(); const t = msg.value; msg.value = ""; send(t); });
+  $("help").addEventListener("click", help);
+  $("stop").addEventListener("click", () => { if (ctl) ctl.abort(); stopListening(); try { speechSynthesis.cancel(); } catch(e){} });
+  $("open-notes").addEventListener("click", () => { renderNotes(); openSheet("notes-sheet"); });
+  $("close-notes").addEventListener("click", () => closeSheet("notes-sheet"));
+  $("open-settings").addEventListener("click", () => { syncSettingsUI(); updateVoiceHelp(); openSheet("settings-sheet"); });
+  $("close-settings").addEventListener("click", () => {
+    const before = prefs.scenario + prefs.level + prefs.region;
+    prefs.scenario = $("scenario").value; prefs.level = $("level").value; prefs.region = $("region").value;
+    prefs.handsfree = $("handsfree").checked; prefs.autospeak = $("autospeak").checked; prefs.showen = $("showen").checked;
+    prefs.model = $("model").value; prefs.apikey = $("apikey").value.trim();
+    savePrefs(); syncSettingsUI(); closeSheet("settings-sheet");
+    for (const en of log.querySelectorAll("[data-en]")) en.hidden = !prefs.showen || !en.textContent;
+    if (before !== prefs.scenario + prefs.level + prefs.region) startConversation();
+  });
+  $("model").addEventListener("change", () => { const p = PRICES[$("model").value]; $("pricehelp").textContent = `$${p[0]} per million input tokens, $${p[1]} per million output. A typical turn is well under a cent.`; });
+  $("region").addEventListener("change", () => { prefs.region = $("region").value; updateVoiceHelp(); });
+  $("restart").addEventListener("click", () => { closeSheet("notes-sheet"); startConversation(); });
+  $("copynotes").addEventListener("click", async () => {
+    const text = state.notes.map(c => (c.original ? c.original + " → " : "") + c.fixed + (c.note ? "  (" + c.note + ")" : "")).join("\n");
+    if (!text) return;
+    const b = $("copynotes");
+    try { await navigator.clipboard.writeText(text); b.textContent = "Copied"; } catch(e){ b.textContent = "Couldn't copy"; }
+    setTimeout(() => { b.textContent = "Copy"; }, 1500);
+  });
+
+  // Boot
+  syncSettingsUI();
+  startConversation();
+  if (!(prefs.apikey||"").trim()) showNotice("First time here: open Settings (gear, top right) and paste your Anthropic API key.", true);
+  if ("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(() => {}); }
+})();
+</script>
+</body>
+</html>
