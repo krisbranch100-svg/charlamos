@@ -195,6 +195,12 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
       <div class="help">Stored only on this device. Get one at <a href="https://platform.claude.com/" target="_blank" rel="noopener">platform.claude.com</a> and set a monthly spending limit on it there.</div>
     </div>
     <div class="field">
+      <label for="sttkey">OpenAI key for transcription (optional)</label>
+      <input id="sttkey" type="password" placeholder="sk-…" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="help">Lets the mic work from the iPhone home-screen icon, where Apple blocks the phone's own speech recognition. Your voice is sent to OpenAI's Whisper and billed to this key at about $0.006 per minute of speech. Get one at <a href="https://platform.openai.com/" target="_blank" rel="noopener">platform.openai.com</a>.</div>
+      <label class="toggle"><input type="checkbox" id="sttalways"> Always transcribe with OpenAI, even in Safari</label>
+    </div>
+    <div class="field">
       <label for="model">Model</label>
       <select id="model">
         <option value="claude-opus-5-5">Claude Opus 5.5 (best corrections)</option>
@@ -257,7 +263,7 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
   for (const [k,v] of Object.entries(REGIONS))   $("region").append(new Option(v.label, k));
 
   // Preferences live on this device only.
-  let prefs = {scenario:"cafe", level:"A2", region:"es", handsfree:true, autospeak:true, showen:false, model:"claude-opus-5-5", apikey:""};
+  let prefs = {scenario:"cafe", level:"A2", region:"es", handsfree:true, autospeak:true, showen:false, model:"claude-opus-5-5", apikey:"", sttkey:"", sttalways:false};
   try { Object.assign(prefs, JSON.parse(localStorage.getItem("charlamos.prefs") || "{}")); } catch(e){}
   if (!SCENARIOS[prefs.scenario]) prefs.scenario = "cafe";
   if (!LEVELS[prefs.level]) prefs.level = "A2";
@@ -268,6 +274,7 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
     $("scenario").value = prefs.scenario; $("level").value = prefs.level; $("region").value = prefs.region;
     $("handsfree").checked = !!prefs.handsfree; $("autospeak").checked = !!prefs.autospeak; $("showen").checked = !!prefs.showen;
     $("model").value = prefs.model; $("apikey").value = prefs.apikey || "";
+    $("sttkey").value = prefs.sttkey || ""; $("sttalways").checked = !!prefs.sttalways;
     const p = PRICES[prefs.model];
     $("pricehelp").textContent = `$${p[0]} per million input tokens, $${p[1]} per million output. A typical turn is well under a cent.`;
     $("scene").textContent = `${SCENARIOS[prefs.scenario].label} · ${prefs.level} · ${REGIONS[prefs.region].label}`;
@@ -442,14 +449,14 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
   }
   if ("speechSynthesis" in window){ loadVoices(); speechSynthesis.addEventListener("voiceschanged", loadVoices); }
   function speak(text, thenListen){
-    if (!("speechSynthesis" in window)){ if (thenListen) startListening(); return; }
+    if (!("speechSynthesis" in window)){ if (thenListen) listen(); return; }
     try {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = person().lang; const v = pickVoice(); if (v) u.voice = v; u.rate = 0.92;
-      u.onend = () => { if (thenListen) startListening(); };
-      u.onerror = () => { if (thenListen) startListening(); };
+      u.onend = () => { if (thenListen) listen(); };
+      u.onerror = () => { if (thenListen) listen(); };
       speechSynthesis.cancel(); speechSynthesis.speak(u);
-    } catch(e){ if (thenListen) startListening(); }
+    } catch(e){ if (thenListen) listen(); }
   }
 
   // --- Speech in
@@ -458,7 +465,7 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
   const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const SITE = location.href.split("#")[0];
   function micFailureCopy(kind){
-    if (IOS && STANDALONE) return "iPhone home-screen apps are not allowed to use speech recognition. Open " + SITE + " in Safari itself (not the home-screen icon) and the mic will work there. Or tap Type and use the mic key on the keyboard.";
+    if (IOS && STANDALONE) return "iPhone blocks the phone's own speech recognition in home-screen apps. Either add an OpenAI key for transcription in Settings (then the mic records and transcribes instead), or open " + SITE + " in Safari. The keyboard's mic key also works from here.";
     if (kind === "missing") return "This browser has no speech recognition. On iPhone use Safari, on Android use Chrome. Or tap Type and use the mic key on the keyboard.";
     if (IOS) return "The microphone was refused. Check Settings › Siri & Search (Siri must be on, or Dictation under General › Keyboard), and Settings › Safari › Microphone. Or tap Type and use the mic key on the keyboard.";
     return "Microphone access was refused. Allow it for this site in your browser settings, then try again. Or tap Type and use the mic key on the keyboard.";
@@ -497,7 +504,86 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
       rec.start();
     } catch(e){ listening = false; mic.classList.remove("listening"); showNotice("Couldn't start the microphone (" + (e && e.message || e) + "). " + micFailureCopy("refused")); }
   }
-  function stopListening(){ try { if (rec) rec.stop(); } catch(e){} }
+  function stopListening(){ try { if (rec) rec.stop(); } catch(e){} if (recorder && recorder.state !== "inactive"){ cancelRec = true; stopRecording(); } }
+
+  // --- Speech in, route 2: record audio and transcribe it with OpenAI Whisper.
+  // Works from the iPhone home-screen icon, where SpeechRecognition is blocked.
+  const STT_PER_MIN = 0.006;
+  function useRecorder(){ const k = (prefs.sttkey||"").trim(); return !!k && (prefs.sttalways || !SR || (IOS && STANDALONE)); }
+  function listen(){ if (useRecorder()) startRecording(); else startListening(); }
+  let stream = null, recorder = null, chunks = [], cancelRec = false, audioCtx = null, vadTimer = null, srcNode = null, heardSpeech = false, recStart = 0;
+  async function startRecording(){
+    if (busy || listening) return;
+    if (!navigator.mediaDevices || !window.MediaRecorder){ showNotice("This browser can't record audio. Open the site in Safari or Chrome."); return; }
+    try { stream = await navigator.mediaDevices.getUserMedia({audio:true}); }
+    catch(e){ showNotice("Microphone access was refused (" + (e && e.name || e) + "). Allow the microphone for this app, then tap the mic again."); setStatus("Tap the mic to talk"); return; }
+    const mime = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find(m => { try { return MediaRecorder.isTypeSupported(m); } catch(e){ return false; } }) || "";
+    try { recorder = new MediaRecorder(stream, mime ? {mimeType: mime} : undefined); }
+    catch(e){ releaseStream(); showNotice("Couldn't start recording (" + (e && e.message || e) + ")."); return; }
+    chunks = []; cancelRec = false; heardSpeech = false; recStart = performance.now();
+    recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop = () => {
+      stopVAD(); releaseStream();
+      listening = false; mic.classList.remove("listening");
+      const secs = (performance.now() - recStart) / 1000;
+      const blob = new Blob(chunks, {type: recorder.mimeType || mime || "audio/mp4"});
+      if (cancelRec){ cancelRec = false; setStatus("Tap the mic to talk"); return; }
+      if (blob.size < 1500 || !heardSpeech){ setStatus("Didn't hear anything. Tap the mic and try again."); return; }
+      transcribe(blob, secs);
+    };
+    recorder.start(250);
+    listening = true; mic.classList.add("listening"); setStatus("Listening… speak Spanish, then pause (or tap to stop)", true); showNotice("");
+    startVAD();
+  }
+  function stopRecording(){ try { if (recorder && recorder.state !== "inactive") recorder.stop(); } catch(e){} }
+  function releaseStream(){ try { if (stream) stream.getTracks().forEach(t => t.stop()); } catch(e){} stream = null; }
+  function startVAD(){
+    // Ends the recording after about 1.4 s of silence once speech has been heard; 30 s hard cap.
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      srcNode = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser(); analyser.fftSize = 1024; srcNode.connect(analyser);
+      const buf = new Uint8Array(analyser.fftSize);
+      let lastLoud = performance.now(); const t0 = lastLoud;
+      vadTimer = setInterval(() => {
+        analyser.getByteTimeDomainData(buf);
+        let sum = 0; for (let i = 0; i < buf.length; i++){ const v = (buf[i] - 128) / 128; sum += v * v; }
+        const rms = Math.sqrt(sum / buf.length), now = performance.now();
+        if (rms > 0.025){ heardSpeech = true; lastLoud = now; }
+        if ((heardSpeech && now - lastLoud > 1400) || now - t0 > 30000 || (!heardSpeech && now - t0 > 8000)) stopRecording();
+      }, 100);
+    } catch(e){ heardSpeech = true; /* no level metering: the learner taps the mic to stop */ }
+  }
+  function stopVAD(){ clearInterval(vadTimer); vadTimer = null; try { if (srcNode) srcNode.disconnect(); } catch(e){} srcNode = null; }
+  async function transcribe(blob, secs){
+    const key = (prefs.sttkey||"").trim();
+    setBusy(true); setStatus("Transcribing…");
+    const bubble = renderMine("…", "interim");
+    const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("webm") ? "webm" : blob.type.includes("ogg") ? "ogg" : "wav";
+    const fd = new FormData();
+    fd.append("file", blob, "speech." + ext);
+    fd.append("model", "whisper-1");
+    fd.append("prompt", "Una conversación en español entre un estudiante y su profesora. " + person().name + ".");
+    let text = "";
+    try {
+      const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {method:"POST", headers:{"authorization": "Bearer " + key}, body: fd});
+      if (!res.ok){
+        let detail = ""; try { detail = (await res.json()).error?.message || ""; } catch(e){}
+        throw new Error(res.status === 401 ? "OpenAI rejected the transcription key. Check it in Settings." : "Transcription failed (" + res.status + "). " + detail);
+      }
+      const data = await res.json();
+      text = (data.text || "").trim();
+      state.usage.cost += (secs / 60) * STT_PER_MIN;
+    } catch(e){
+      bubble.remove(); setBusy(false); setStatus("Tap the mic to talk");
+      showNotice(e && e.message ? e.message : "No connection to the transcription service.");
+      return;
+    }
+    bubble.remove(); setBusy(false);
+    if (!text){ setStatus("Didn't catch that. Tap the mic and try again."); return; }
+    send(text);
+  }
 
   // --- Conversation
   function startConversation(){
@@ -547,9 +633,10 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
       renderTutor(reply); renderNotes();
       if (truncated) showNotice("The reply was cut short.", true);
       setBusy(false);
-      if (prefs.autospeak){ setStatus("Speaking…"); speak(data.reply, prefs.handsfree && !!SR); }
-      else if (prefs.handsfree && SR) startListening();
-      if (!prefs.autospeak && !(prefs.handsfree && SR)) setStatus("Tap the mic to talk");
+      const canListen = !!SR || useRecorder();
+      if (prefs.autospeak){ setStatus("Speaking…"); speak(data.reply, prefs.handsfree && canListen); }
+      else if (prefs.handsfree && canListen) listen();
+      if (!prefs.autospeak && !(prefs.handsfree && canListen)) setStatus("Tap the mic to talk");
     } catch(e){
       wait.remove();
       state.turns.pop();
@@ -589,11 +676,12 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
 
   // --- Wiring
   mic.addEventListener("click", () => {
-    if (!SR){ $("typed").hidden = false; msg.focus(); showNotice(micFailureCopy("missing")); return; }
-    if (listening){ stopListening(); return; }
+    if (listening){ if (useRecorder()) stopRecording(); else stopListening(); return; }
+    if (!SR && !useRecorder()){ $("typed").hidden = false; msg.focus(); showNotice(micFailureCopy("missing")); return; }
+    if (IOS && STANDALONE && !useRecorder()){ showNotice(micFailureCopy("missing")); return; }
     if (!(prefs.apikey||"").trim()){ fail({code:"no_key"}); return; }
     try { speechSynthesis.cancel(); } catch(e){}
-    startListening();
+    listen();
   });
   $("keyboard").addEventListener("click", () => { $("typed").hidden = !$("typed").hidden; if (!$("typed").hidden) msg.focus(); });
   $("typed").addEventListener("submit", e => { e.preventDefault(); const t = msg.value; msg.value = ""; send(t); });
@@ -607,6 +695,8 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
     prefs.scenario = $("scenario").value; prefs.level = $("level").value; prefs.region = $("region").value;
     prefs.handsfree = $("handsfree").checked; prefs.autospeak = $("autospeak").checked; prefs.showen = $("showen").checked;
     prefs.model = $("model").value; prefs.apikey = $("apikey").value.trim();
+    prefs.sttkey = $("sttkey").value.trim(); prefs.sttalways = $("sttalways").checked;
+    renderDiag(); if (!(IOS && STANDALONE) || useRecorder()) showNotice("");
     savePrefs(); syncSettingsUI(); closeSheet("settings-sheet");
     for (const en of log.querySelectorAll("[data-en]")) en.hidden = !prefs.showen || !en.textContent;
     if (before !== prefs.scenario + prefs.level + prefs.region) startConversation();
@@ -627,14 +717,15 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
     const lines = [];
     lines.push("Speech recognition: " + (SR ? "available" : "not available in this browser"));
     lines.push("Opened from: " + (STANDALONE ? "home-screen icon" : "browser tab"));
-    if (IOS && STANDALONE) lines.push("iPhone home-screen apps can't use speech recognition. Open the site in Safari to talk.");
+    lines.push("Mic route: " + (useRecorder() ? "record and transcribe with OpenAI" : (SR ? "phone's speech recognition" : "none")));
+    if (IOS && STANDALONE && !useRecorder()) lines.push("iPhone blocks the phone's speech recognition in home-screen apps: add an OpenAI key above, or open the site in Safari.");
     lines.push("Browser: " + navigator.userAgent.replace(/^Mozilla\/5\.0 /, "").slice(0, 90));
     d.textContent = lines.join(" · ");
   }
   // Boot
   syncSettingsUI(); renderDiag();
   startConversation();
-  if (IOS && STANDALONE) showNotice(micFailureCopy("missing"), true);
+  if (IOS && STANDALONE && !useRecorder()) showNotice(micFailureCopy("missing"), true);
   else if (!(prefs.apikey||"").trim()) showNotice("First time here: open Settings (gear, top right) and paste your Anthropic API key.", true);
   if ("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").then(r => { try { r.update(); } catch(e){} }).catch(() => {}); }
 })();
