@@ -207,6 +207,10 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
       <label>Voice</label>
       <div class="help" id="voicehelp"></div>
     </div>
+    <div class="field">
+      <label>Microphone check</label>
+      <div class="help" id="diag"></div>
+    </div>
   </div>
 </section>
 
@@ -450,6 +454,15 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
 
   // --- Speech in
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const STANDALONE = (navigator.standalone === true) || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const SITE = location.href.split("#")[0];
+  function micFailureCopy(kind){
+    if (IOS && STANDALONE) return "iPhone home-screen apps are not allowed to use speech recognition. Open " + SITE + " in Safari itself (not the home-screen icon) and the mic will work there. Or tap Type and use the mic key on the keyboard.";
+    if (kind === "missing") return "This browser has no speech recognition. On iPhone use Safari, on Android use Chrome. Or tap Type and use the mic key on the keyboard.";
+    if (IOS) return "The microphone was refused. Check Settings › Siri & Search (Siri must be on, or Dictation under General › Keyboard), and Settings › Safari › Microphone. Or tap Type and use the mic key on the keyboard.";
+    return "Microphone access was refused. Allow it for this site in your browser settings, then try again. Or tap Type and use the mic key on the keyboard.";
+  }
   let interimBubble = null;
   function startListening(){
     if (!SR || busy || listening) return;
@@ -457,7 +470,8 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
       rec = new SR();
       rec.lang = person().lang; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
       let finalText = "";
-      rec.onstart = () => { listening = true; mic.classList.add("listening"); setStatus("Listening… speak Spanish, then pause", true); showNotice(""); };
+      const startTimer = setTimeout(() => { if (!listening){ try { rec.abort(); } catch(e){} showNotice("The microphone didn't start. " + micFailureCopy("refused")); } }, 5000);
+      rec.onstart = () => { clearTimeout(startTimer); listening = true; mic.classList.add("listening"); setStatus("Listening… speak Spanish, then pause", true); showNotice(""); };
       rec.onresult = (ev) => {
         let interim = "";
         for (let i = ev.resultIndex; i < ev.results.length; i++){
@@ -468,19 +482,20 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
         if (shown){ if (!interimBubble) interimBubble = renderMine(shown, "interim"); else { interimBubble.querySelector(".bubble").textContent = shown; scrollDown(); } }
       };
       rec.onerror = (ev) => {
-        listening = false; mic.classList.remove("listening");
-        if (ev.error === "not-allowed" || ev.error === "service-not-allowed") showNotice("Microphone access was refused. Allow it for this site in your browser settings, then try again.");
+        listening = false; mic.classList.remove("listening"); clearTimeout(startTimer);
+        if (ev.error === "not-allowed" || ev.error === "service-not-allowed") showNotice(micFailureCopy("refused"));
         else if (ev.error === "no-speech") setStatus("Didn't hear anything. Tap the mic and try again.");
-        else if (ev.error !== "aborted") setStatus("Speech recognition error: " + ev.error);
+        else if (ev.error === "audio-capture") showNotice("No microphone was found. " + micFailureCopy("refused"));
+        else if (ev.error !== "aborted") showNotice("Speech recognition error: " + ev.error + ". Tap Type and use the keyboard's mic key instead.");
       };
       rec.onend = () => {
-        listening = false; mic.classList.remove("listening");
+        clearTimeout(startTimer); listening = false; mic.classList.remove("listening");
         const text = finalText.trim();
         if (interimBubble){ interimBubble.remove(); interimBubble = null; }
         if (text) send(text); else if (!busy) setStatus("Tap the mic to talk");
       };
       rec.start();
-    } catch(e){ listening = false; mic.classList.remove("listening"); setStatus("Couldn't start the microphone. Tap the mic to try again."); }
+    } catch(e){ listening = false; mic.classList.remove("listening"); showNotice("Couldn't start the microphone (" + (e && e.message || e) + "). " + micFailureCopy("refused")); }
   }
   function stopListening(){ try { if (rec) rec.stop(); } catch(e){} }
 
@@ -574,7 +589,7 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
 
   // --- Wiring
   mic.addEventListener("click", () => {
-    if (!SR){ $("typed").hidden = false; msg.focus(); showNotice("This browser has no speech recognition. Type instead, or open the app in Safari (iPhone) or Chrome (Android).", true); return; }
+    if (!SR){ $("typed").hidden = false; msg.focus(); showNotice(micFailureCopy("missing")); return; }
     if (listening){ stopListening(); return; }
     if (!(prefs.apikey||"").trim()){ fail({code:"no_key"}); return; }
     try { speechSynthesis.cancel(); } catch(e){}
@@ -607,11 +622,21 @@ h1{font-family:var(--display);font-weight:400;font-size:26px;line-height:1;margi
     setTimeout(() => { b.textContent = "Copy"; }, 1500);
   });
 
+  function renderDiag(){
+    const d = $("diag"); if (!d) return;
+    const lines = [];
+    lines.push("Speech recognition: " + (SR ? "available" : "not available in this browser"));
+    lines.push("Opened from: " + (STANDALONE ? "home-screen icon" : "browser tab"));
+    if (IOS && STANDALONE) lines.push("iPhone home-screen apps can't use speech recognition. Open the site in Safari to talk.");
+    lines.push("Browser: " + navigator.userAgent.replace(/^Mozilla\/5\.0 /, "").slice(0, 90));
+    d.textContent = lines.join(" · ");
+  }
   // Boot
-  syncSettingsUI();
+  syncSettingsUI(); renderDiag();
   startConversation();
-  if (!(prefs.apikey||"").trim()) showNotice("First time here: open Settings (gear, top right) and paste your Anthropic API key.", true);
-  if ("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(() => {}); }
+  if (IOS && STANDALONE) showNotice(micFailureCopy("missing"), true);
+  else if (!(prefs.apikey||"").trim()) showNotice("First time here: open Settings (gear, top right) and paste your Anthropic API key.", true);
+  if ("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").then(r => { try { r.update(); } catch(e){} }).catch(() => {}); }
 })();
 </script>
 </body>
