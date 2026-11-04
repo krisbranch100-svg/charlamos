@@ -16,7 +16,10 @@ Anthropic API key**, which is stored only on the device. Nothing is sent anywher
 1. Create a repository (public or private) and push this folder to it.
 2. Settings → Pages → Source: *Deploy from a branch*, branch `main`, folder `/ (root)`.
 3. Open the published URL on your phone in Safari (iPhone) or Chrome (Android).
-4. Share → *Add to Home Screen*. It now opens full screen like an app.
+4. **iPhone:** keep using it in Safari. Add it to Favorites or the start page. Do not use
+   *Add to Home Screen*: iOS does not allow speech recognition inside home-screen web apps,
+   so the mic is dead there (typing still works).
+   **Android:** Chrome menu → *Add to Home screen* works fully, mic included.
 
 Any static host works (Vercel, Netlify, Cloudflare Pages). It must be served over **https** or the
 browser will not allow the microphone.
